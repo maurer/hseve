@@ -45,7 +45,7 @@ cabal-version:       >=1.8
 library
   -- Modules exported by the library.
   exposed-modules:     EVE
-  
+  extensions: DeriveDataTypeable  
   -- Modules included in this library but not exported.
   -- other-modules:       
   

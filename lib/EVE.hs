@@ -15,6 +15,9 @@ import Data.Conduit
 import Network.HTTP.Conduit
 import Text.XML
 import Data.Map ((!))
+import Control.Monad.Error
+import Data.Typeable
+import Control.Exception
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
@@ -28,10 +31,18 @@ data EVEParam = EInt Int
 data CorpID = CoID {coidInner :: Int} deriving Show
 data CharID = ChID {chidInner :: Int} deriving Show
 
-type EVE = ReaderT EVECred IO
+data EVEError = ParseError
+              | OtherError String deriving (Show, Typeable)
 
-runEVE :: EVECred -> EVE a -> IO a
-runEVE = flip runReaderT
+instance Error EVEError where
+  strMsg = OtherError
+
+instance Exception EVEError
+
+type EVE = ErrorT EVEError (ReaderT EVECred IO)
+
+runEVE :: EVECred -> EVE a -> IO (Either EVEError a)
+runEVE c m = runReaderT (runErrorT m) c
 
 baseURL :: String
 baseURL = "https://api.eveonline.com/"
@@ -48,8 +59,9 @@ eveQuery cat op params = do
   let url = baseURL ++ cat ++ "/" ++ op ++ ".xml.aspx"
   req <- parseUrl url
   let req' = urlEncodedBody (map format params') req
-  withManager $ \m -> do xml <- fmap responseBody $ http req' m
-                         xml $$ sinkDoc def
+  doc <- withManager $ \m -> do xml <- fmap responseBody $ http req' m
+                                xml $$ sinkDoc def
+  return doc
   where format (s, v) = let
           v' = case v of
                  EInt n -> show n
@@ -62,10 +74,17 @@ isElement _ = False
 toElement (NodeElement x) = x
 
 (!?) :: Element -> String -> Element
-e !? n = head $ filter ((== (show n)) . show . nameLocalName . elementName)
-           (map toElement $ filter isElement $ elementNodes e)
+e !? n =
+  case filter ((== (show n)) . show . nameLocalName . elementName)
+               (map toElement $ filter isElement $ elementNodes e) of
+    x:_ -> x
+    _ -> throw ParseError
+
 (!*) :: Element -> String -> String
-e !* n = show $ fromJust $ lookup (Name (fromString n) Nothing Nothing) (elementAttributes e)
+e !* n =
+  case lookup (Name (fromString n) Nothing Nothing) (elementAttributes e) of
+    Just x -> show x
+    _ -> throw ParseError
 
 extractRowset f doc = let
   root = documentRoot doc
