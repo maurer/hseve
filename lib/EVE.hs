@@ -8,6 +8,7 @@ coidInner,
 chidInner
 ) where
 
+import Prelude hiding (catch)
 import Data.String
 import Data.Maybe
 import Control.Monad.Reader
@@ -18,6 +19,7 @@ import Data.Map ((!))
 import Control.Monad.Error
 import Data.Typeable
 import Control.Exception
+import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
@@ -31,7 +33,8 @@ data EVEParam = EInt Int
 data CorpID = CoID {coidInner :: Int} deriving Show
 data CharID = ChID {chidInner :: Int} deriving Show
 
-data EVEError = ParseError
+data EVEError = StructError
+              | ValueParseError
               | OtherError String deriving (Show, Typeable)
 
 instance Error EVEError where
@@ -73,23 +76,31 @@ isElement _ = False
 
 toElement (NodeElement x) = x
 
-(!?) :: Element -> String -> Element
-e !? n =
+(!?) :: EVE Element -> String -> EVE Element
+e' !? n = do
+  e <- e'
   case filter ((== (show n)) . show . nameLocalName . elementName)
                (map toElement $ filter isElement $ elementNodes e) of
-    x:_ -> x
-    _ -> throw ParseError
+    x:_ -> return x
+    _ -> throwError StructError
 
-(!*) :: Element -> String -> String
-e !* n =
+(!*) :: EVE Element -> String -> EVE String
+e' !* n = do
+  e <- e'
   case lookup (Name (fromString n) Nothing Nothing) (elementAttributes e) of
-    Just x -> show x
-    _ -> throw ParseError
+    Just x -> return $ T.unpack x
+    _ -> throw StructError
 
-extractRowset f doc = let
-  root = documentRoot doc
-  rows = map toElement $ filter isElement $ elementNodes $ root !? "result" !? "rowset"
-  in map f rows
+readE :: (Read a) => String -> EVE a
+readE s =
+  case reads s of
+    [(x,"")] -> return x
+    _ -> throwError ValueParseError
+
+extractRowset f doc = do
+  let root = fmap documentRoot doc
+  rows <- fmap (map toElement . filter isElement . elementNodes) $ root !? "result" !? "rowset"
+  mapM (f . return) rows
 
 --The EVE monad should carry an implicit error other than IO's. This should be fixed and validation added, but I would like to at least see this much work first.
 getCharacters :: EVE [( String -- ^ Character name
@@ -98,8 +109,10 @@ getCharacters :: EVE [( String -- ^ Character name
                       , CorpID -- ^ Corp ID
                       )
                      ]
-getCharacters = fmap (extractRowset charExtract) $ eveQuery "account" "characters" []
-   where charExtract row = (read $ row !* "name",
-                            ChID $ read $ read $ row !* "characterID",
-                            read $ row !* "corporationName",
-                            CoID $ read $ read $ row !* "corporationID")
+getCharacters = extractRowset charExtract $ eveQuery "account" "characters" []
+   where charExtract row = do
+           name <- row !* "name"
+           chid <- fmap ChID $ readE =<< row !* "characterID"
+           corp <- row !* "corporationName"
+           coid <- fmap CoID $ readE =<< row !* "corporationID"
+           return (name, chid, corp, coid)
