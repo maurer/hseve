@@ -9,6 +9,8 @@ import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
 
+import Data.Time
+
 baseURL :: String
 baseURL = "https://api.eveonline.com/"
 
@@ -18,24 +20,35 @@ eveQuery :: String         -- ^ Category
 	 -> EVE Element          -- ^ Resultant XML
 eveQuery cat op params = do
   creds <- getCreds
-  let params' = ("keyID", EInt $ userID creds):
-                ("vCode", EStr $ apiKey creds):
-		params
-  let url = baseURL ++ cat ++ "/" ++ op ++ ".xml.aspx"
-  req <- parseUrl url
-  let req' = urlEncodedBody (map format params') req
-  doc <- withManager $ \m -> do xml <- fmap responseBody $ http req' m
-                                xml $$ sinkDoc def
-  elm  <- apiCheck doc
-  elm' <- checkError elm
-  --TODO Actually extract and use cache information
-  return elm'
+  let q = (creds, (cat, op, params))
+  mr <- eveCacheCheck q
+  case mr of
+    Just r  -> return r
+    Nothing -> do
+      let params' = ("keyID", EInt $ userID creds):
+                    ("vCode", EStr $ apiKey creds):
+                    params
+      let url = baseURL ++ cat ++ "/" ++ op ++ ".xml.aspx"
+      req <- parseUrl url
+      let req' = urlEncodedBody (map format params') req
+      doc <- withManager $ \m -> do xml <- fmap responseBody $ http req' m
+                                    xml $$ sinkDoc def
+      elm  <- apiCheck doc
+      elm' <- checkError elm
+      let timeGrab p = readE =<< (fmap inner $ (return elm) !? p)
+      t0   <- timeGrab "currentTime"
+      t1   <- timeGrab "cachedUntil"
+      let dt = diffUTCTime t1 t0
+      eveCacheReg q elm' dt
+      return elm'
   where format (s, v) = let
           v' = case v of
                  EInt n -> show n
                  EStr n -> n
           in (BS.pack s, BS.pack v')
-
+        inner = (concatMap exContent) . elementNodes
+        exContent (NodeContent x) = T.unpack x
+        exContent _ = ""
 isElement (NodeElement _) = True
 isElement _ = False
 
