@@ -8,7 +8,6 @@ coidInner,
 chidInner
 ) where
 
-import Prelude hiding (catch)
 import Data.String
 import Data.Maybe
 import Control.Monad.Reader
@@ -18,7 +17,6 @@ import Text.XML
 import Data.Map ((!))
 import Control.Monad.Error
 import Data.Typeable
-import Control.Exception
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -34,13 +32,14 @@ data CorpID = CoID {coidInner :: Int} deriving Show
 data CharID = ChID {chidInner :: Int} deriving Show
 
 data EVEError = StructError
+              | AuthError
+              | APIErrorCode Int
               | ValueParseError
+              | APIVersionError
               | OtherError String deriving (Show, Typeable)
 
 instance Error EVEError where
   strMsg = OtherError
-
-instance Exception EVEError
 
 type EVE = ErrorT EVEError (ReaderT EVECred IO)
 
@@ -50,10 +49,10 @@ runEVE c m = runReaderT (runErrorT m) c
 baseURL :: String
 baseURL = "https://api.eveonline.com/"
 
-eveQuery :: String               -- ^ Category
-         -> String               -- ^ Operation
+eveQuery :: String         -- ^ Category
+         -> String         -- ^ Operation
 	 -> [(String, EVEParam)] -- ^ Parameters
-	 -> EVE Document         -- ^ Resultant XML
+	 -> EVE Element          -- ^ Resultant XML
 eveQuery cat op params = do
   creds <- ask
   let params' = ("keyID", EInt $ userID creds):
@@ -64,7 +63,10 @@ eveQuery cat op params = do
   let req' = urlEncodedBody (map format params') req
   doc <- withManager $ \m -> do xml <- fmap responseBody $ http req' m
                                 xml $$ sinkDoc def
-  return doc
+  elm  <- apiCheck doc
+  elm' <- checkError elm
+  --TODO Actually extract and use cache information
+  return elm'
   where format (s, v) = let
           v' = case v of
                  EInt n -> show n
@@ -87,9 +89,9 @@ e' !? n = do
 (!*) :: EVE Element -> String -> EVE String
 e' !* n = do
   e <- e'
-  case lookup (Name (fromString n) Nothing Nothing) (elementAttributes e) of
+  case lookup (name n) (elementAttributes e) of
     Just x -> return $ T.unpack x
-    _ -> throw StructError
+    _ -> throwError StructError
 
 readE :: (Read a) => String -> EVE a
 readE s =
@@ -97,12 +99,38 @@ readE s =
     [(x,"")] -> return x
     _ -> throwError ValueParseError
 
-extractRowset f doc = do
-  let root = fmap documentRoot doc
-  rows <- fmap (map toElement . filter isElement . elementNodes) $ root !? "result" !? "rowset"
+name s = Name (T.pack s) Nothing Nothing
+
+assertError :: EVEError -> Bool -> EVE ()
+assertError e b = if b then return () else throwError e
+
+apiCheck :: Document -> EVE Element
+apiCheck doc = do
+  let root = documentRoot doc
+  assertError StructError $ (elementName root) == (name "eveapi")
+  assertError APIVersionError $
+    case lookup (name "version") (elementAttributes root) of
+      Just v  -> (T.unpack v) == "2"
+      Nothing -> False
+  return $ root
+
+errorCode :: Int -> EVEError
+errorCode 203 = AuthError
+errorCode n = APIErrorCode n
+
+checkError :: Element -> EVE Element
+checkError doc = do
+  e <- catchError (fmap Just $ readE =<< (return doc) !? "error" !* "code")
+                  (\_ -> return Nothing)
+  case e of
+    Just n  -> throwError $ errorCode n
+    Nothing -> return ()
+  (return doc) !? "result"
+
+extractRowset f elm = do
+  rows <- fmap (map toElement . filter isElement . elementNodes) $ elm !? "rowset"
   mapM (f . return) rows
 
---The EVE monad should carry an implicit error other than IO's. This should be fixed and validation added, but I would like to at least see this much work first.
 getCharacters :: EVE [( String -- ^ Character name
                       , CharID -- ^ Character ID
                       , String -- ^ Corp name
