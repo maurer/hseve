@@ -14,12 +14,12 @@ import Data.Time
 baseURL :: String
 baseURL = "https://api.eveonline.com/"
 
-eveQuery :: String         -- ^ Category
+eveQuery :: EVECred        -- ^ Credentials
+         -> String         -- ^ Category
          -> String         -- ^ Operation
 	 -> [(String, EVEParam)] -- ^ Parameters
 	 -> EVE Element          -- ^ Resultant XML
-eveQuery cat op params = do
-  creds <- getCreds
+eveQuery creds cat op params = do
   let q = (creds, (cat, op, params))
   mr <- eveCacheCheck q
   case mr of

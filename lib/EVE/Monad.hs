@@ -33,17 +33,14 @@ type Query = (EVECred, (String, String, [(String, EVEParam)]))
 type Response = Element
 type Cache = TimedCache Query Response
 
-type EVE = ErrorT EVEError (ReaderT EVECred (StateT Cache IO))
+type EVE = ErrorT EVEError (StateT Cache IO)
 
 -- | Runs an action in the EVE monad. Note that this currently
 --   uses a new cache manager per-invocation, so you should not
 --   call this frequently, instead preferring to embed all your
 --   calls into a single monadic action.
 runEVE :: EVECred -> EVE a -> IO (Either EVEError a)
-runEVE c m = evalStateT (runReaderT (runErrorT m) c) empty
-
-getCreds :: EVE EVECred
-getCreds = ask
+runEVE c m = evalStateT (runErrorT m) empty
 
 eveCacheReg :: Query -> Response -> NominalDiffTime -> EVE ()
 eveCacheReg q r dt = do

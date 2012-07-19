@@ -3,13 +3,14 @@ module EVE.Query where
 import EVE.Monad
 import EVE.Query.XML
 
-getCharacters :: EVE [( String -- ^ Character name
+getCharacters :: EVECred       -- ^ Credentials
+              -> EVE [( String -- ^ Character name
                       , CharID -- ^ Character ID
                       , String -- ^ Corp name
                       , CorpID -- ^ Corp ID
                       )
                      ]
-getCharacters = extractRowset charExtract $ eveQuery "account" "characters" []
+getCharacters ec = extractRowset charExtract $ eveQuery ec "account" "characters" []
    where charExtract row = do
            name <- row !* "name"
            chid <- fmap ChID $ readE =<< row !* "characterID"
