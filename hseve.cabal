@@ -45,7 +45,7 @@ cabal-version:       >=1.8
 library
   -- Modules exported by the library.
   exposed-modules: EVE
-  other-modules:   EVE.Query, EVE.Monad, EVE.Query.TimedCache EVE.Query.XML
+  other-modules:   EVE.Query, EVE.Monad, EVE.Query.TimedCache EVE.Query.XML EVE.Query.Types
   extensions: DeriveDataTypeable  
   
   -- Other library packages from which modules are imported.

@@ -5,6 +5,7 @@ import Network.HTTP.Conduit
 import Text.XML
 import Control.Monad.Error
 import EVE.Monad
+import EVE.Query.Types
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS

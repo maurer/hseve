@@ -5,18 +5,9 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Text.XML
 import EVE.Query.TimedCache
+import EVE.Query.Types
 import Data.Typeable
 import Data.Time
-
-data EVECred = EC { userID :: Int
-                  , apiKey :: String
-      } deriving (Ord, Eq)
-
-data EVEParam = EInt Int
-              | EStr String deriving (Ord, Eq)
-
-data CorpID = CoID {coidInner :: Int} deriving Show
-data CharID = ChID {chidInner :: Int} deriving Show
 
 data EVEError = StructError
               | AuthError
@@ -42,12 +33,19 @@ type EVE = ErrorT EVEError (StateT Cache IO)
 runEVE :: EVE a -> IO (Either EVEError a)
 runEVE m = evalStateT (runErrorT m) empty
 
-eveCacheReg :: Query -> Response -> NominalDiffTime -> EVE ()
+-- | Logs a query / response pair into the cache
+eveCacheReg :: Query           -- ^ The question
+            -> Response        -- ^ The answer
+            -> NominalDiffTime -- ^ Time delta to expiry
+            -> EVE ()
 eveCacheReg q r dt = do
   t0 <- liftIO $ getCurrentTime
   modify $ cacheReg q r $ addUTCTime dt t0
 
-eveCacheCheck :: Query -> EVE (Maybe Response)
+-- | Checks the cache for an answer to the question.
+--   Dumps expired cache at the same time.
+eveCacheCheck :: Query                -- ^ The question
+              -> EVE (Maybe Response) -- ^ The response if present
 eveCacheCheck q = do
   s <- get
   t <- liftIO $ getCurrentTime

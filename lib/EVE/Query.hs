@@ -2,22 +2,24 @@ module EVE.Query where
 
 import EVE.Monad
 import EVE.Query.XML
+import EVE.Query.Types
 import Data.Time
 
-getCharacters :: EVECred       -- ^ Credentials
-              -> EVE [( String -- ^ Character name
-                      , CharID -- ^ Character ID
-                      , String -- ^ Corp name
-                      , CorpID -- ^ Corp ID
-                      )
-                     ]
+data CharIdent = CI { charName :: String -- ^ Character name
+                    , charID   :: CharID -- ^ Character ID
+                    , corpName :: String -- ^ Corp Name
+                    , corpID   :: CorpID -- ^ Corp ID
+                    }
+
+getCharacters :: EVECred  -- ^ Credentials
+              -> EVE [CharIdent] -- ^ Character ID records
 getCharacters ec = extractRowset charExtract $ eveQuery ec "account" "characters" []
    where charExtract row = do
            name <- row !* "name"
            chid <- fmap ChID $ readE =<< row !* "characterID"
            corp <- row !* "corporationName"
            coid <- fmap CoID $ readE =<< row !* "corporationID"
-           return (name, chid, corp, coid)
+           return $ CI name chid corp coid
 
 data AccountStatus = AcStat { paidUntil    :: UTCTime
                             , createDate   :: UTCTime
