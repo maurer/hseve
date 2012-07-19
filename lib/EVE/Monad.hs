@@ -39,8 +39,8 @@ type EVE = ErrorT EVEError (StateT Cache IO)
 --   uses a new cache manager per-invocation, so you should not
 --   call this frequently, instead preferring to embed all your
 --   calls into a single monadic action.
-runEVE :: EVECred -> EVE a -> IO (Either EVEError a)
-runEVE c m = evalStateT (runErrorT m) empty
+runEVE :: EVE a -> IO (Either EVEError a)
+runEVE m = evalStateT (runErrorT m) empty
 
 eveCacheReg :: Query -> Response -> NominalDiffTime -> EVE ()
 eveCacheReg q r dt = do
