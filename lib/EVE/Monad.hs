@@ -29,3 +29,5 @@ type EVE = ErrorT EVEError (ReaderT EVECred IO)
 runEVE :: EVECred -> EVE a -> IO (Either EVEError a)
 runEVE c m = runReaderT (runErrorT m) c
 
+getCreds :: EVE EVECred
+getCreds = ask

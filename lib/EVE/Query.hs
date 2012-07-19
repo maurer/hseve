@@ -1,14 +1,9 @@
 module EVE.Query  where
 
-import Data.String
-import Data.Maybe
-import Control.Monad.Reader
 import Data.Conduit
 import Network.HTTP.Conduit
 import Text.XML
-import Data.Map ((!))
 import Control.Monad.Error
-import Data.Typeable
 import EVE.Monad
 import qualified Data.Text as T
 import qualified Data.ByteString.Char8 as BS
@@ -22,7 +17,7 @@ eveQuery :: String         -- ^ Category
 	 -> [(String, EVEParam)] -- ^ Parameters
 	 -> EVE Element          -- ^ Resultant XML
 eveQuery cat op params = do
-  creds <- ask
+  creds <- getCreds
   let params' = ("keyID", EInt $ userID creds):
                 ("vCode", EStr $ apiKey creds):
 		params
