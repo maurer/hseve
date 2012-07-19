@@ -35,7 +35,7 @@ eveQuery creds cat op params = do
                                     xml $$ sinkDoc def
       elm  <- apiCheck doc
       elm' <- checkError elm
-      let timeGrab p = readE =<< (fmap inner $ (return elm) !? p)
+      let timeGrab p = readE =<< (fmap nodeContents $ (return elm) !? p)
       t0   <- timeGrab "currentTime"
       t1   <- timeGrab "cachedUntil"
       let dt = diffUTCTime t1 t0
@@ -46,9 +46,11 @@ eveQuery creds cat op params = do
                  EInt n -> show n
                  EStr n -> n
           in (BS.pack s, BS.pack v')
-        inner = (concatMap exContent) . elementNodes
-        exContent (NodeContent x) = T.unpack x
+
+nodeContents = (concatMap exContent) . elementNodes
+  where exContent (NodeContent x) = T.unpack x
         exContent _ = ""
+
 isElement (NodeElement _) = True
 isElement _ = False
 
