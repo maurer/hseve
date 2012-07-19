@@ -1,4 +1,4 @@
-module EVE.TimedCache where
+module EVE.Query.TimedCache where
 
 import qualified Data.Map as Map
 import Data.Map (Map)

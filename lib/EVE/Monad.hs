@@ -4,7 +4,7 @@ import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.State
 import Text.XML
-import EVE.TimedCache
+import EVE.Query.TimedCache
 import Data.Typeable
 import Data.Time
 
