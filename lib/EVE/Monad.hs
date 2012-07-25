@@ -1,3 +1,5 @@
+-- | Contains the glue to declare the EVE monad and then
+--   embed the various queries and error handling into it.
 module EVE.Monad where
 
 import Control.Monad.Error
@@ -9,6 +11,10 @@ import EVE.Query.Types
 import Data.Typeable
 import Data.Time
 
+-- | All the kinds of errors that can happen. If "OtherError"
+--   is ever encountered in practice, it should be considered
+--   a bug, but it is useful to have for debugging and to allow
+--   other things to throw errors for the moment.
 data EVEError = StructError
               | AuthError
               | APIErrorCode Int
@@ -20,10 +26,17 @@ instance Error EVEError where
   strMsg = OtherError
 --TODO For memory performance, I should try to move the cache out of
 --the xml layer. This is easier for now though.
+-- | Our queries are just the tupled form of what is given to
+--   the HTTP/XML query transport.
 type Query = (EVECred, (String, String, [(String, EVEParam)]))
+-- | Our responses are just XML elements
 type Response = Element
+-- | 'Cache' is the kind of 'TimedCache' that we are using.
 type Cache = TimedCache Query Response
 
+-- | The monad itself. It has 'ErrorT' for explicit error handling,
+--   'StateT' for API response caching, and 'IO' to actually run
+--   requests.
 type EVE = ErrorT EVEError (StateT Cache IO)
 
 -- | Runs an action in the EVE monad. Note that this currently
