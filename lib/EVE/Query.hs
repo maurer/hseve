@@ -13,7 +13,7 @@ data CharIdent = CI { charName :: String -- ^ Character name
 
 getCharacters :: EVECred  -- ^ Credentials
               -> EVE [CharIdent] -- ^ Character ID records
-getCharacters ec = extractRowset charExtract $ eveQuery ec "account" "characters" []
+getCharacters ec = mapRowset charExtract $ eveQuery ec "account" "characters" []
    where charExtract row = do
            name <- row !* "name"
            chid <- fmap ChID $ readE =<< row !* "characterID"

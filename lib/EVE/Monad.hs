@@ -46,6 +46,12 @@ type EVE = ErrorT EVEError (StateT Cache IO)
 runEVE :: EVE a -> IO (Either EVEError a)
 runEVE m = evalStateT (runErrorT m) empty
 
+-- | 'assert' with a specified error to throw within the 'EVE'
+--   monad. This really should be in "Control.Monad.Error" in a
+--   generic form, but for some reason doesn't seem to be.
+assertError :: EVEError -> Bool -> EVE ()
+assertError e b = if b then return () else throwError e
+
 -- | Logs a query / response pair into the cache
 eveCacheReg :: Query           -- ^ The question
             -> Response        -- ^ The answer

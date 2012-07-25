@@ -1,3 +1,7 @@
+-- | This module handles sending and receiving raw queries
+--   from the EVE API. It handles the HTTP request, auth,
+--   error checking, and the XML-interaction utility functions
+--   used by 'EVE.Query' to implement each call.
 module EVE.Query.XML  where
 
 import Data.Conduit
@@ -12,13 +16,19 @@ import qualified Data.ByteString.Lazy.Char8 as LBS
 
 import Data.Time
 
+-- | This is the URL we are querying. No need to parameterize
+--   this unless we want to do testing later, as there's only
+--   one instance of EVE.
 baseURL :: String
 baseURL = "https://api.eveonline.com/"
 
+-- | This is the meat of the module. It takes in a description
+--   of a query the user wants performed, then fetches it,
+--   checking errors along the way.
 eveQuery :: EVECred        -- ^ Credentials
          -> String         -- ^ Category
          -> String         -- ^ Operation
-	 -> [(String, EVEParam)] -- ^ Parameters
+	 -> [(String, EVEParam)] -- ^ Parameter map (argname, val)
 	 -> EVE Element          -- ^ Resultant XML
 eveQuery creds cat op params = do
   let q = (creds, (cat, op, params))
@@ -47,18 +57,34 @@ eveQuery creds cat op params = do
                  EStr n -> n
           in (BS.pack s, BS.pack v')
 
-readContents :: (Read a) => Element -> String -> EVE a
+-- | Parses the non-XML contents of a selected subnode of a given
+--   node. This may seem odd to fuse '(!?)' and this functionality,
+--   but in practice these two have occurred together every time.
+readContents :: (Read a)
+             => Element -- ^ Parent
+             -> String  -- ^ Child branch
+             -> EVE a
 readContents elm p = readE =<< (fmap nodeContents $ (return elm) !? p)
   where nodeContents = (concatMap exContent) . elementNodes
         exContent (NodeContent x) = T.unpack x
         exContent _ = ""
 
+-- | Helper predicate for what kind of a 'Node' somthing is
 isElement (NodeElement _) = True
 isElement _ = False
 
+-- | Partial function valid only when 'isElement' returns true
+--   for unwrapping a 'Node'
 toElement (NodeElement x) = x
 
-(!?) :: EVE Element -> String -> EVE Element
+-- | 'Element' indexing on an 'Element'. To allow chaining,
+--   it is written in a style where it takes a monadic action
+--   and produces a new one. It cannot be non-monadic,
+--   as the arm may not exist, and it needs to throw an error
+--   into the monad in that case.
+(!?) :: EVE Element -- ^ Chainable element
+     -> String      -- ^ Branch choice
+     -> EVE Element
 e' !? n = do
   e <- e'
   case filter ((== (show n)) . show . nameLocalName . elementName)
@@ -66,24 +92,35 @@ e' !? n = do
     x:_ -> return x
     _ -> throwError StructError
 
-(!*) :: EVE Element -> String -> EVE String
+-- | Attribute indexing on an 'Element'. Otherwise the same as
+--   '(!?)'
+(!*) :: EVE Element -- ^ Chainable element
+     -> String      -- ^ Branch choice
+     -> EVE String
 e' !* n = do
   e <- e'
   case lookup (name n) (elementAttributes e) of
     Just x -> return $ T.unpack x
     _ -> throwError StructError
 
-readE :: (Read a) => String -> EVE a
+-- | 'read', but set up so that it throws the error into the 'EVE'
+--   monad instead of using 'error', allowing for better error
+--   handling.
+readE :: (Read a)
+      => String -- ^ String to be parsed
+      -> EVE a
 readE s =
   case reads s of
     [(x,"")] -> return x
     _ -> throwError ValueParseError
 
+-- | Generates an XML version of a string as a name, assuming
+--   no namespacing is going on.
 name s = Name (T.pack s) Nothing Nothing
 
-assertError :: EVEError -> Bool -> EVE ()
-assertError e b = if b then return () else throwError e
-
+-- | Checks that we have an xml document that respresents our
+--   expected API version response, returns the component of
+--   the doc that matters.
 apiCheck :: Document -> EVE Element
 apiCheck doc = do
   let root = documentRoot doc
@@ -94,10 +131,13 @@ apiCheck doc = do
       Nothing -> False
   return $ root
 
+-- | Converts EVE API error codes to 'EVEError's.
+--   Anything that goes to 'APIErrorCode' in practice is a bug.
 errorCode :: Int -> EVEError
 errorCode 203 = AuthError
 errorCode n = APIErrorCode n
 
+-- | Checks for an error according to the API's error reporting.
 checkError :: Element -> EVE Element
 checkError doc = do
   e <- catchError (fmap Just $ readE =<< (return doc) !? "error" !* "code")
@@ -107,6 +147,13 @@ checkError doc = do
     Nothing -> return ()
   (return doc) !? "result"
 
-extractRowset f elm = do
+-- | A convenience function for interacting with the "rowset"
+--   element used in some responses. Takes a projector on rows
+--   and applies it to each row in turn. Does monadic chaining
+--   a la '(!?)'.
+mapRowset :: (EVE Element -> EVE a) -- ^ Projection of a row
+          -> EVE Element        -- ^ Action to get the element
+          -> EVE [a]
+mapRowset f elm = do
   rows <- fmap (map toElement . filter isElement . elementNodes) $ elm !? "rowset"
   mapM (f . return) rows
