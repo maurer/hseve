@@ -7,11 +7,6 @@ module EVE.Query.Types where
 data EVEParam = EInt Int
               | EStr String deriving (Ord, Eq)
 
--- | Sealable type representing a number we know is a corp ID
-data CorpID = CoID {coidInner :: Int} deriving Show
--- | Sealable type representing a number we know is a char ID
-data CharID = ChID {chidInner :: Int} deriving Show
-
 -- | EVE Credentials. Only valid for new-style credentials,
 --   we don't support the old style as they are deprecated
 --   anyways. Note that 'userID' does not actually pertain

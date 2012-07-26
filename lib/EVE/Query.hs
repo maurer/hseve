@@ -7,6 +7,23 @@ import EVE.Query.XML
 import EVE.Query.Types
 import Data.Time
 
+-- | Sealable type representing a number we know is a corp ID
+data CorpID = CoID {coidInner :: Int} deriving Show
+-- | Sealable type representing a number we know is a char ID
+data CharID = ChID {chidInner :: Int} deriving Show
+-- | Sealable type representing a linked account ID/key pair.
+data Account = AcID { accIdInner  :: Int
+                    , accKeyInner :: Int
+                    } deriving Show
+-- | Type representing ISK with appropriate read/show
+data ISK = ISK {iskInner :: Int}
+instance Show ISK where
+  show (ISK v) = (show (v `div` 100)) ++ "." ++ (show (v `mod` 100))
+instance Read ISK where
+  readsPrec x v = let
+    (k, s) = unzip $ readsPrec x v
+    in zip (map (\z -> ISK $ floor $ z * 100) k) s
+
 -- | Represents the handles to a character's information
 data CharIdent = CI { charName :: String -- ^ Character name
                     , charID   :: CharID -- ^ Character ID
@@ -49,3 +66,15 @@ getAccStatus ec = do
                   , logonCount   = lc
                   , logonMinutes = lm
                   }
+
+getBalances :: EVECred -- ^ User credentials
+            -> CharID  -- ^ Which character to query
+            -> EVE [(Account, ISK)]
+getBalances ec chid = do
+  mapRowset balExtract $ eveQuery ec "char" "AccountBalance"
+                                  [("characterID", EInt $ chidInner chid)]
+  where balExtract row = do
+          accID  <- readE =<< row !* "accountID"
+          accKey <- readE =<< row !* "accountKey"
+          val    <- readE =<< row !* "balance"
+          return (AcID accID accKey, val)
