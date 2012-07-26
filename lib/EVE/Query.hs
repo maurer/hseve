@@ -70,6 +70,8 @@ getAccStatus ec = do
                   , logonMinutes = lm
                   }
 
+-- | Uses the selected credential to acquire the accounts of a
+--   given character.
 getBalances :: EVECred -- ^ User credentials
             -> CharID  -- ^ Which character to query
             -> EVE [(Account, ISK)]
