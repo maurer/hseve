@@ -1,6 +1,9 @@
 -- | This module contains the implementations of all the different
 --   individual queries. This may be broken down by category later.
-module EVE.Query where
+module EVE.Query
+( module EVE.Query.Types
+, module EVE.Query
+) where
 
 import EVE.Monad
 import EVE.Query.XML
